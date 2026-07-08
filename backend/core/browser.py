@@ -1,7 +1,6 @@
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from playwright_stealth import Stealth
 from .config import *
-import asyncio
 
 async def init_stealth_browser():
     playwright = await async_playwright().start()
@@ -16,8 +15,9 @@ async def init_stealth_browser():
         locale=LOCALE
         )
 
-    await stealth_async(context)
     page = await context.new_page()
+    stealth = Stealth()
+    await stealth.apply_stealth_async(page)
 
     return {
         "playwright": playwright,
