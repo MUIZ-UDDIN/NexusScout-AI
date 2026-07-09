@@ -18,11 +18,22 @@ async def scout_leads(query: str):
             print("[✅] Success! Sidebar content captured.")
 
             await asyncio.sleep(2)
-            await page.screenshot(path="leads_found.png")
+            business_cards = page.get_by_role("article")
+
+            count = await business_cards.count()
+            print(f"[*] Found {count} results in sidebar.")
+
+            for i in range(count):
+                card = business_cards.nth(i)
+
+            name_link = card.locator("a").first
+            name = await name_link.get_attribute("aria-label")  
+
+            website_btn = card.get_by_label("Website")
+
             
         except Exception:
             print("[❌] Failed to find results sidebar even with direct navigation.")
-            await page.screenshot(path="failed_direct.png")
 
     except Exception as e:
         print(f"An error occurred during scouting: {e}")
