@@ -7,40 +7,22 @@ async def scout_leads(query: str):
 
     try:
         page = pages["page"]
-        await page.goto("https://www.google.com/maps", wait_until="domcontentloaded")
+        encoded_query = query.replace(" ", "+")
+        await page.goto(f"https://www.google.com/maps/search/{encoded_query}", wait_until="commit")
+
+
+        print("[*] Waiting for results sidebar to appear...")
         try:
-            await page.get_by_text("Accept all").click(timeout=5000)
-
-        except:
-            pass 
-
-        search_box = page.get_by_role("combobox", name="Search Google Maps")
-        await search_box.wait_for(state="visible", timeout=10000)
-        await search_box.click()
-
-        await search_box.press_sequentially(query, delay=100)
-        await asyncio.sleep(1)
-
-        await page.get_by_label("Search", exact=True).click()
-        await page.keyboard.press("Enter") 
-        print(f"[*] Waiting for results sidebar: 'Results for {query}'")
-
-        print("[*] Waiting for results to load...")
-        try:
-            # We look for the universal link pattern '/maps/place/'
             first_link = page.locator("a[href*='/maps/place/']").first
-            await first_link.wait_for(state="visible", timeout=15000)
-            print("[✅] Search successful! Results are visible.")
-        except:
-            print("[❌] Timeout: Results sidebar did not appear.")
-            await page.screenshot(path="debug_timeout.png")
-            return
-        
+            await first_link.wait_for(state="visible", timeout=30000)
+            print("[✅] Success! Sidebar content captured.")
 
-        await asyncio.sleep(5)
-
-        await page.screenshot(path="test.png")
-        print("Search successful! Screenshot saved.")
+            await asyncio.sleep(2)
+            await page.screenshot(path="leads_found.png")
+            
+        except Exception:
+            print("[❌] Failed to find results sidebar even with direct navigation.")
+            await page.screenshot(path="failed_direct.png")
 
     except Exception as e:
         print(f"An error occurred during scouting: {e}")
