@@ -18,18 +18,42 @@ async def scout_leads(query: str):
             print("[✅] Success! Sidebar content captured.")
 
             await asyncio.sleep(2)
+
+            print("[*] Scrolling to load more leads...")
+            sidebar = page.locator("div[role='feed']")
+            for _ in range(3):
+                await sidebar.evaluate("el => el.scrollBy(0, 4000)")
+                await asyncio.sleep(2)
+
             business_cards = page.get_by_role("article")
 
             count = await business_cards.count()
             print(f"[*] Found {count} results in sidebar.")
 
             for i in range(count):
-                card = business_cards.nth(i)
+                try:
+                    card = business_cards.nth(i)
+                    is_sponsored = await card.get_by_text("Sponsored").is_visible()
 
-            name_link = card.locator("a").first
-            name = await name_link.get_attribute("aria-label")  
+                    if is_sponsored:
+                        print(f"[*] Skipping Ad at index {i}")
+                        continue
 
-            website_btn = card.get_by_label("Website")
+                    name_link = card.locator("a").first
+                    name = await name_link.get_attribute("aria-label")  
+
+                    website_link = card.locator('a[data-value="Website"]')
+
+                    website_url = "Not Found"
+                    if await website_link.count() > 0:
+                        website_url = await website_link.get_attribute("href")
+
+                    if name:
+                        print(f"[Lead] {name} | Website: {website_url}")
+
+                except Exception as e:
+                    print(f"[!] Error processing lead {i}: {e}")
+                    continue # Move to the next lead
 
             
         except Exception:
