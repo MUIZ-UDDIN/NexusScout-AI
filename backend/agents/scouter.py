@@ -1,8 +1,11 @@
 from core.browser import init_stealth_browser
+from database.engine import init_db, AsyncSessionLocal
+from database.models import Lead
 import asyncio
 
-
 async def scout_leads(query: str):
+    await init_db()
+    
     pages = await init_stealth_browser()
 
     try:
@@ -51,11 +54,21 @@ async def scout_leads(query: str):
                     if name:
                         print(f"[Lead] {name} | Website: {website_url}")
 
+                    async with AsyncSessionLocal() as session:
+                        try:
+                            new_lead = Lead(name=name, website=website_url)
+                            session.add(new_lead)
+                            await session.commit()
+                            print(f"[💾] Saved to DB: {name}")
+
+                        except Exception as e:
+                            await session.rollback()
+                            print(f"[⚠️] Duplicate skipped: {name}")
+
                 except Exception as e:
                     print(f"[!] Error processing lead {i}: {e}")
-                    continue # Move to the next lead
-
-            
+                    continue
+       
         except Exception:
             print("[❌] Failed to find results sidebar even with direct navigation.")
 
