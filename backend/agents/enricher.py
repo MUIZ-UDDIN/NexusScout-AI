@@ -31,7 +31,11 @@ async def enrich_lead():
                     if await contact_link.count() > 0:
                         print(f"[*] Homepage empty. Diving into: {await contact_link.get_attribute('href')}")
                         await contact_link.click()
-                        await page.wait_for_load_state("domcontentloaded")
+                        try:
+                            await page.wait_for_load_state("domcontentloaded")
+
+                        except Exception:
+                            continue
                         
                         new_html = await page.content()
                         new_found = re.findall(EMAIL_REGEX, new_html, re.I)
