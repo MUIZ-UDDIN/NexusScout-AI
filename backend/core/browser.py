@@ -1,3 +1,8 @@
+import sys
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 from .config import *

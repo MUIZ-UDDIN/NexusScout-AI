@@ -1,9 +1,21 @@
+import sys
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from core.browser import init_stealth_browser
 from database.engine import init_db, AsyncSessionLocal
 from database.models import Lead
+from services.status import set_status
 import asyncio
 
-async def scout_leads(query: str):
+_current_query: str | None = None
+_current_section_id = None
+
+async def scout_leads(query: str, depth: int = 3, section_id=None):
+    global _current_query, _current_section_id
+    _current_query = query
+    _current_section_id = section_id
     await init_db()
     
     pages = await init_stealth_browser()
@@ -22,9 +34,11 @@ async def scout_leads(query: str):
 
             await asyncio.sleep(2)
 
-            print("[*] Scrolling to load more leads...")
+            print(f"[*] Scrolling to load more leads (depth={depth})...")
+            set_status(True, f"Scrolling to load leads (depth={depth})...", "scouting")
             sidebar = page.locator("div[role='feed']")
-            for _ in range(3):
+            for s in range(depth):
+                set_status(True, f"Scrolling ({s+1}/{depth})...", "scouting", s + 1, depth)
                 await sidebar.evaluate("el => el.scrollBy(0, 4000)")
                 await asyncio.sleep(2)
 
@@ -33,40 +47,81 @@ async def scout_leads(query: str):
             count = await business_cards.count()
             print(f"[*] Found {count} results in sidebar.")
 
+            # First pass: collect card hrefs, skip ads
+            card_hrefs = []
             for i in range(count):
                 try:
                     card = business_cards.nth(i)
                     is_sponsored = await card.get_by_text("Sponsored").is_visible()
-
                     if is_sponsored:
                         print(f"[*] Skipping Ad at index {i}")
                         continue
+                    link = card.locator("a").first
+                    href = await link.get_attribute("href")
+                    name = await link.get_attribute("aria-label")
+                    if href and "/maps/place/" in href:
+                        card_hrefs.append({"name": name, "href": href})
+                except Exception as e:
+                    print(f"[!] Error collecting card {i}: {e}")
 
-                    name_link = card.locator("a").first
-                    name = await name_link.get_attribute("aria-label")  
+            print(f"[*] Processing {len(card_hrefs)} non-sponsored leads...")
+            set_status(True, f"Processing {len(card_hrefs)} leads...", "scouting")
 
-                    website_link = card.locator('a[data-value="Website"]')
+            # Second pass: visit each place page to extract full data
+            for idx, data in enumerate(card_hrefs):
+                set_status(True, f"Scraping {data.get('name','?')} ({idx+1}/{len(card_hrefs)})...", "scouting", idx + 1, len(card_hrefs))
+                try:
+                    await page.goto(data["href"], wait_until="domcontentloaded", timeout=20000)
+                    await asyncio.sleep(2.5)
 
-                    website_url = "Not Found"
-                    if await website_link.count() > 0:
-                        website_url = await website_link.get_attribute("href")
+                    name_el = page.locator("h1").first
+                    name = await name_el.inner_text() if await name_el.count() > 0 else data.get("name")
+
+                    phone = None
+                    phone_el = page.locator('button[data-item-id*="phone:tel:"]').first
+                    if await phone_el.count() > 0:
+                        raw = await phone_el.get_attribute("data-item-id")
+                        if raw:
+                            phone = raw.split("phone:tel:")[-1]
+
+                    website_url = None
+                    for sel in ['a[data-item-id="website"]', 'a[href*="://"][data-item-id*="website"]', '[data-tooltip*="website"] a', 'a[aria-label*="Website"]']:
+                        el = page.locator(sel).first
+                        if await el.count() > 0:
+                            href = await el.get_attribute("href")
+                            if href and href != "#" and href.startswith("http"):
+                                website_url = href
+                                break
+                    if not website_url:
+                        try:
+                            website_link = page.get_by_role("link", name="Website").first
+                            if await website_link.count() > 0:
+                                href = await website_link.get_attribute("href")
+                                if href and href != "#" and href.startswith("http"):
+                                    website_url = href
+                        except:
+                            pass
+
+                    address = None
+                    addr_el = page.locator('button[data-item-id*="address"]').first
+                    if await addr_el.count() > 0:
+                        address = await addr_el.get_attribute("aria-label")
+
+                    print(f"[Lead] {name} | Website: {website_url} | Phone: {phone} | Address: {address}")
 
                     if name:
-                        print(f"[Lead] {name} | Website: {website_url}")
-
-                    async with AsyncSessionLocal() as session:
-                        try:
-                            new_lead = Lead(name=name, website=website_url)
-                            session.add(new_lead)
-                            await session.commit()
-                            print(f"[💾] Saved to DB: {name}")
-
-                        except Exception as e:
-                            await session.rollback()
-                            print(f"[⚠️] Duplicate skipped: {name}")
+                        async with AsyncSessionLocal() as session:
+                            try:
+                                new_lead = Lead(name=name, website=website_url, phone=phone, address=address, search_query=_current_query, section_id=_current_section_id)
+                                session.add(new_lead)
+                                await session.commit()
+                                print(f"[💾] Saved to DB: {name}")
+                            except Exception:
+                                await session.rollback()
+                                print(f"[⚠️] Duplicate skipped: {name}")
 
                 except Exception as e:
-                    print(f"[!] Error processing lead {i}: {e}")
+                    print(f"[!] Error processing {data.get('name','?')}: {e}")
                     continue
        
         except Exception:
