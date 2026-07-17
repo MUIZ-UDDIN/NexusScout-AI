@@ -8,6 +8,7 @@ export interface Lead {
   address: string | null;
   status: string;
   search_query: string | null;
+  description: string | null;
   created_at: string;
 }
 

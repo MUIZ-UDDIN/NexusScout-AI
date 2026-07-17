@@ -18,6 +18,7 @@ class Lead(Base):
     address: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="scouted")
     search_query: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     contacted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

@@ -14,7 +14,7 @@ TIMEZONE="America/New_York"
 
 # Operational Modes
 
-HEADLESS=False
+HEADLESS=True
 SLOW_MO=50
 
 # Target Location

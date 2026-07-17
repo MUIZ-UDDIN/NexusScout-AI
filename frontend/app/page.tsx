@@ -430,9 +430,12 @@ export default function Home() {
                           </div>
                         </button>
 
-                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>
-                          <div className="px-5 pb-5 pt-0 border-t border-white/[0.06]">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[32rem] opacity-100" : "max-h-0 opacity-0"}`}>
+                        <div className="px-5 pb-5 pt-0 border-t border-white/[0.06]">
+                          <p className="pt-4 text-sm text-white/50 leading-relaxed border-b border-white/[0.06] pb-4 mb-2">
+                            {lead.description || "No additional details available"}
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
                               <div className="flex items-center gap-2 text-sm text-white/60">
                                 <span className="size-7 rounded-lg bg-gradient-to-br from-amber-500/30 to-orange-500/30 flex items-center justify-center text-white/70 text-xs shrink-0">🌐</span>
                                 {lead.website ? (

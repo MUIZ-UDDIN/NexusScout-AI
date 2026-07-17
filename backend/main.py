@@ -92,23 +92,22 @@ async def get_leads(section_id: str | None = None, db: AsyncSession = Depends(ge
 
 @app.get("/api/leads/stats")
 async def get_lead_stats(section_id: str | None = None, db: AsyncSession = Depends(get_db)):
-    def by_section(stmt):
-        if section_id:
-            return stmt.where(Lead.section_id == uuid.UUID(section_id))
-        return stmt
+    base = select(Lead)
+    if section_id:
+        base = base.where(Lead.section_id == uuid.UUID(section_id))
 
-    total_stmt = by_section(select(func.count()).select_from(Lead))
-    enriched_stmt = by_section(select(func.count()).select_from(Lead).where(Lead.status == "enriched"))
-    failed_stmt = by_section(select(func.count()).select_from(Lead).where(Lead.status == "failed"))
-    
-    total_res = await db.execute(total_stmt)
-    enriched_res = await db.execute(enriched_stmt)
-    failed_res = await db.execute(failed_stmt)
-    
+    total = await db.execute(select(func.count()).select_from(base.subquery()))
+    enriched = await db.execute(
+        select(func.count()).select_from(base.where(Lead.status == "enriched").subquery())
+    )
+    failed = await db.execute(
+        select(func.count()).select_from(base.where(Lead.status == "failed").subquery())
+    )
+
     return {
-        "total": total_res.scalar(),
-        "enriched": enriched_res.scalar(),
-        "failed": failed_res.scalar(),
+        "total": total.scalar(),
+        "enriched": enriched.scalar(),
+        "failed": failed.scalar(),
     }
 
 @app.post("/api/leads/{lead_id}/contact")

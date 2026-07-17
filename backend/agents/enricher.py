@@ -31,6 +31,20 @@ async def enrich_lead():
                 try:
                     await page.goto(lead.website, timeout=15000, wait_until="domcontentloaded")
                     html = await page.content()
+
+                    desc = await page.locator('meta[name="description"]').get_attribute("content")
+                    if not desc:
+                        desc = await page.locator('meta[property="og:description"]').get_attribute("content")
+                    if not desc:
+                        try:
+                            p = page.locator("p").first
+                            if await p.count() > 0:
+                                desc = (await p.inner_text()).strip()[:300]
+                        except:
+                            pass
+                    if desc:
+                        lead.description = desc.strip()[:500]
+
                     found = list(set(re.findall(EMAIL_REGEX, html, re.I)))
                     clean_emails = [e for e in found if not any(noise in e.lower() for noise in BLACKLIST)]
 
