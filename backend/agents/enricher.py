@@ -6,6 +6,32 @@ from services.status import set_status
 import re
 import asyncio
 
+CHALLENGE_TITLE_PATTERNS = [
+    "verifying you are human", "verifying you're human",
+    "just a moment", "attention required", "please wait",
+    "security check", "challenge", "cloudflare",
+]
+CHALLENGE_BODY_PATTERNS = [
+    "cloudflare", "turnstile", "cf-challenge",
+    "verify you are human", "security check",
+]
+
+async def _is_challenge_page(page) -> bool:
+    try:
+        title = await page.title()
+        title_lower = title.lower()
+        for p in CHALLENGE_TITLE_PATTERNS:
+            if p in title_lower:
+                return True
+        body_text = await page.locator("body").inner_text(timeout=3000)
+        body_lower = body_text.lower()[:500]
+        for p in CHALLENGE_BODY_PATTERNS:
+            if p in body_lower:
+                return True
+    except Exception:
+        pass
+    return False
+
 async def enrich_lead():
     EMAIL_REGEX = r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+"
     BLACKLIST = ["sentry", "wix", "example", "vimeo", "google", "jpg", "png"]
@@ -29,17 +55,31 @@ async def enrich_lead():
                 if not lead.website or "http" not in lead.website: 
                     continue
                 try:
-                    await page.goto(lead.website, timeout=15000, wait_until="domcontentloaded")
+                    await page.goto(lead.website, timeout=10000, wait_until="domcontentloaded")
+                    await asyncio.sleep(0.5)
+
+                    if await _is_challenge_page(page):
+                        print(f"[!] Challenge page, marking failed: {lead.website}")
+                        lead.status = "failed"
+                        continue
+
                     html = await page.content()
 
-                    desc = await page.locator('meta[name="description"]').get_attribute("content")
+                    desc = None
+                    try:
+                        desc = await page.locator('meta[name="description"]').get_attribute("content", timeout=3000)
+                    except:
+                        pass
                     if not desc:
-                        desc = await page.locator('meta[property="og:description"]').get_attribute("content")
+                        try:
+                            desc = await page.locator('meta[property="og:description"]').get_attribute("content", timeout=3000)
+                        except:
+                            pass
                     if not desc:
                         try:
                             p = page.locator("p").first
                             if await p.count() > 0:
-                                desc = (await p.inner_text()).strip()[:300]
+                                desc = (await p.inner_text(timeout=3000)).strip()[:300]
                         except:
                             pass
                     if desc:

@@ -10,11 +10,11 @@ VIEWPORT = {
 # Timezone
 
 LOCALE="en-US"
-TIMEZONE="America/New_York"
+TIMEZONE="Asia/Karachi"
 
 # Operational Modes
 
-HEADLESS=True
+HEADLESS=False
 SLOW_MO=50
 
 # Target Location

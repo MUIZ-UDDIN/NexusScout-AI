@@ -97,7 +97,7 @@ export default function Home() {
     return () => { document.removeEventListener("mousedown", handleClick); document.removeEventListener("keydown", handleKey); };
   }, []);
 
-  async function handleScout(query: string, depth: number) {
+  async function handleScout(query: string, depth: number, mode: string = "maps") {
     setScouting(true);
     setScoutingSectionId(currentSectionId);
     setStatusMsg("Starting...");
@@ -108,7 +108,7 @@ export default function Home() {
       await fetch(`${API}/api/scout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, depth, section_id: currentSectionId }),
+        body: JSON.stringify({ query, depth, section_id: currentSectionId, mode }),
       });
     } catch {
       setScouting(false);

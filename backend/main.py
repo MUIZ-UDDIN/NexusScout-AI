@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database.engine import AsyncSessionLocal, init_db
 from database.models import Lead, Section
 from agents.scouter import scout_leads
+from agents.scouter_web import scout_web
 from agents.enricher import enrich_lead
 from services.status import set_status, get_status
 from services.ai_service import generate_opening
@@ -23,6 +24,7 @@ class ScoutRequest(BaseModel):
     query: str
     depth: int = 3
     section_id: str | None = None
+    mode: str = "maps"
 
 app = FastAPI()
 
@@ -43,7 +45,7 @@ async def get_db():
 
 scout_lock = asyncio.Semaphore(1)
 
-async def run_full_research(query: str, depth: int = 3, section_id: str | None = None):
+async def run_full_research(query: str, depth: int = 3, section_id: str | None = None, mode: str = "maps"):
     async with scout_lock:
         try:
             set_status(True, "Launching browser...", "scouting")
@@ -63,7 +65,10 @@ async def run_full_research(query: str, depth: int = 3, section_id: str | None =
                         session.add(section)
                 await session.commit()
                 await session.refresh(section)
-            await scout_leads(query, depth=depth, section_id=section.id)
+            if mode == "web":
+                await scout_web(query, depth=depth, section_id=section.id)
+            else:
+                await scout_leads(query, depth=depth, section_id=section.id)
             set_status(True, "Enriching leads...", "enriching")
             await enrich_lead()
         except Exception as e:
@@ -78,7 +83,7 @@ async def scout_status():
 @app.post("/api/scout")
 async def trigger_scout(request: ScoutRequest, background_tasks: BackgroundTasks):
     set_status(True, "Queued...", "queued")
-    background_tasks.add_task(run_full_research, request.query, request.depth, request.section_id)
+    background_tasks.add_task(run_full_research, request.query, request.depth, request.section_id, request.mode)
     return {"status": "Agent Dispatched", "job": request.query}
 
 @app.get("/api/leads")

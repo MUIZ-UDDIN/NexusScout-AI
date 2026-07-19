@@ -42,27 +42,37 @@ async def scout_leads(query: str, depth: int = 3, section_id=None):
                 await sidebar.evaluate("el => el.scrollBy(0, 4000)")
                 await asyncio.sleep(2)
 
-            business_cards = page.get_by_role("article")
+            business_cards = sidebar.get_by_role("article") if await sidebar.count() > 0 else page.get_by_role("article")
 
             count = await business_cards.count()
-            print(f"[*] Found {count} results in sidebar.")
+            print(f"[*] Found {count} article elements on page.")
 
             # First pass: collect card hrefs, skip ads
             card_hrefs = []
+            skipped_sponsored = 0
+            skipped_no_place = 0
             for i in range(count):
                 try:
                     card = business_cards.nth(i)
-                    is_sponsored = await card.get_by_text("Sponsored").is_visible()
+                    sponsored = card.get_by_text("Sponsored")
+                    is_sponsored = await sponsored.count() > 0 and await sponsored.first.is_visible()
                     if is_sponsored:
-                        print(f"[*] Skipping Ad at index {i}")
+                        skipped_sponsored += 1
                         continue
                     link = card.locator("a").first
+                    if await link.count() == 0:
+                        skipped_no_place += 1
+                        continue
                     href = await link.get_attribute("href")
                     name = await link.get_attribute("aria-label")
                     if href and "/maps/place/" in href:
                         card_hrefs.append({"name": name, "href": href})
+                    else:
+                        skipped_no_place += 1
                 except Exception as e:
                     print(f"[!] Error collecting card {i}: {e}")
+
+            print(f"[*] Sidebar: {skipped_sponsored} sponsored, {skipped_no_place} non-place, {len(card_hrefs)} valid cards")
 
             print(f"[*] Processing {len(card_hrefs)} non-sponsored leads...")
             set_status(True, f"Processing {len(card_hrefs)} leads...", "scouting")

@@ -3,29 +3,54 @@
 import { useState, FormEvent } from "react";
 
 interface Props {
-  onScout: (query: string, depth: number) => void;
+  onScout: (query: string, depth: number, mode: string) => void;
   scouting: boolean;
 }
 
 export default function SearchBar({ onScout, scouting }: Props) {
   const [query, setQuery] = useState("");
-  const [depth, setDepth] = useState(3);
+  const [depth, setDepth] = useState(5);
+  const [mode, setMode] = useState("maps");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!query.trim() || scouting) return;
-    onScout(query.trim(), depth);
+    onScout(query.trim(), depth, mode);
     setQuery("");
   }
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setMode("maps")}
+          className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
+            mode === "maps"
+              ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+              : "text-white/40 hover:text-white/60 border border-transparent"
+          }`}
+        >
+          Google Maps
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("web")}
+          className={`text-xs font-semibold px-3 py-1 rounded-full transition-all ${
+            mode === "web"
+              ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+              : "text-white/40 hover:text-white/60 border border-transparent"
+          }`}
+        >
+          Google Search
+        </button>
+      </div>
       <form onSubmit={handleSubmit} className="flex gap-3">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search Google Maps..."
+          placeholder={mode === "maps" ? "Search Google Maps..." : "Search Google Web (e.g. professors, CEOs, companies)..."}
           className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm px-4 py-3 text-sm text-white/80 placeholder-white/30 outline-none transition-all duration-200 focus:border-violet-500/40 focus:bg-white/[0.08] focus:shadow-lg focus:shadow-violet-500/5"
         />
         <button
@@ -49,11 +74,13 @@ export default function SearchBar({ onScout, scouting }: Props) {
         </button>
       </form>
       <div className="flex items-center gap-3 px-1">
-        <span className="text-xs text-white/40 font-medium">Scroll depth:</span>
+        <span className="text-xs text-white/40 font-medium">
+          {mode === "maps" ? "Scroll depth:" : "Results:"}
+        </span>
         <input
           type="range"
           min={1}
-          max={10}
+          max={mode === "maps" ? 10 : 20}
           value={depth}
           onChange={(e) => setDepth(Number(e.target.value))}
           disabled={scouting}
