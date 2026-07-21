@@ -9,6 +9,7 @@ export interface Lead {
   status: string;
   search_query: string | null;
   description: string | null;
+  trigger_event: string | null;
   created_at: string;
 }
 

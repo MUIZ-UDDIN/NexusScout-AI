@@ -44,6 +44,7 @@ PROFILE_KEYWORDS = ["profile", "faculty", "people", "staff", "~"]
 
 _current_query: str | None = None
 _current_section_id = None
+_current_headline: str | None = None
 
 def _extract_url(href: str) -> str | None:
     if not href:
@@ -209,6 +210,7 @@ async def _save_lead(name: str, email: str | None, phone: str | None, descriptio
                 description=description,
                 search_query=_current_query,
                 section_id=_current_section_id,
+                trigger_event=_current_headline,
             )
             session.add(new_lead)
             await session.commit()
@@ -216,10 +218,11 @@ async def _save_lead(name: str, email: str | None, phone: str | None, descriptio
         except Exception:
             await session.rollback()
 
-async def scout_web(query: str, depth: int = 5, section_id=None):
-    global _current_query, _current_section_id
+async def scout_web(query: str, depth: int = 5, section_id=None, headline=None):
+    global _current_query, _current_section_id, _current_headline
     _current_query = query
     _current_section_id = section_id
+    _current_headline = headline
     await init_db()
     pages = await init_stealth_browser()
     page = pages["page"]

@@ -5,6 +5,9 @@ from core.browser import init_stealth_browser
 from services.status import set_status
 import re
 import asyncio
+import httpx
+
+N8N_CALLBACK_URL = "https://instance-analog-ebook-hair.trycloudflare.com/webhook-test/lead-enriched"
 
 CHALLENGE_TITLE_PATTERNS = [
     "verifying you are human", "verifying you're human",

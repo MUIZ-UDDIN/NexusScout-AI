@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, func, UUID, DateTime, ForeignKey
+from sqlalchemy import String, Text, func, UUID, DateTime, ForeignKey
 
 class Base(DeclarativeBase):
     pass
@@ -19,6 +19,7 @@ class Lead(Base):
     status: Mapped[str] = mapped_column(String, default="scouted")
     search_query: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    trigger_event: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     contacted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

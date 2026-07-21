@@ -133,7 +133,7 @@ export default function Home() {
           setStatusMsg("");
           setStatusProgress(0);
           setStatusTotal(0);
-          refreshAll();
+          await refreshAll();
         }
       } catch {
         // ignore polling errors
@@ -141,6 +141,27 @@ export default function Home() {
     }, 800);
     return () => clearInterval(interval);
   }, [scouting]);
+
+  const lastKnownScouting = useRef(false);
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/api/scout/status`);
+        const s = await res.json();
+        if (s.running && !lastKnownScouting.current) {
+          lastKnownScouting.current = true;
+          setScouting(true);
+          setScoutingSectionId(currentSectionId);
+        }
+        if (!s.running && lastKnownScouting.current) {
+          lastKnownScouting.current = false;
+        }
+      } catch {
+        // ignore
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleContact(lead: Lead, e: React.MouseEvent) {
     e.stopPropagation();
@@ -432,6 +453,12 @@ export default function Home() {
 
                       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[32rem] opacity-100" : "max-h-0 opacity-0"}`}>
                         <div className="px-5 pb-5 pt-0 border-t border-white/[0.06]">
+                          {lead.trigger_event && (
+                            <div className="pt-4 pb-3 flex items-start gap-2 text-xs text-amber-300/80 border-b border-white/[0.06] mb-2">
+                              <span className="mt-0.5 shrink-0">⚡</span>
+                              <span>Triggered by: <span className="text-amber-200/90 font-medium">{lead.trigger_event}</span></span>
+                            </div>
+                          )}
                           <p className="pt-4 text-sm text-white/50 leading-relaxed border-b border-white/[0.06] pb-4 mb-2">
                             {lead.description || "No additional details available"}
                           </p>

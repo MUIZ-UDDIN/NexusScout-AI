@@ -25,6 +25,7 @@ class ScoutRequest(BaseModel):
     depth: int = 3
     section_id: str | None = None
     mode: str = "maps"
+    headline: str | None = None
 
 app = FastAPI()
 
@@ -45,7 +46,7 @@ async def get_db():
 
 scout_lock = asyncio.Semaphore(1)
 
-async def run_full_research(query: str, depth: int = 3, section_id: str | None = None, mode: str = "maps"):
+async def run_full_research(query: str, depth: int = 3, section_id: str | None = None, mode: str = "maps", headline: str | None = None):
     async with scout_lock:
         try:
             set_status(True, "Launching browser...", "scouting")
@@ -66,9 +67,9 @@ async def run_full_research(query: str, depth: int = 3, section_id: str | None =
                 await session.commit()
                 await session.refresh(section)
             if mode == "web":
-                await scout_web(query, depth=depth, section_id=section.id)
+                await scout_web(query, depth=depth, section_id=section.id, headline=headline)
             else:
-                await scout_leads(query, depth=depth, section_id=section.id)
+                await scout_leads(query, depth=depth, section_id=section.id, headline=headline)
             set_status(True, "Enriching leads...", "enriching")
             await enrich_lead()
         except Exception as e:
@@ -83,7 +84,7 @@ async def scout_status():
 @app.post("/api/scout")
 async def trigger_scout(request: ScoutRequest, background_tasks: BackgroundTasks):
     set_status(True, "Queued...", "queued")
-    background_tasks.add_task(run_full_research, request.query, request.depth, request.section_id, request.mode)
+    background_tasks.add_task(run_full_research, request.query, request.depth, request.section_id, request.mode, request.headline)
     return {"status": "Agent Dispatched", "job": request.query}
 
 @app.get("/api/leads")
