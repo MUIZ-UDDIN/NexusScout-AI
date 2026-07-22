@@ -143,6 +143,8 @@ export default function Home() {
   }, [scouting]);
 
   const lastKnownScouting = useRef(false);
+  const currentSectionIdRef = useRef(currentSectionId);
+  currentSectionIdRef.current = currentSectionId;
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -151,10 +153,28 @@ export default function Home() {
         if (s.running && !lastKnownScouting.current) {
           lastKnownScouting.current = true;
           setScouting(true);
-          setScoutingSectionId(currentSectionId);
+          setScoutingSectionId(currentSectionIdRef.current);
         }
         if (!s.running && lastKnownScouting.current) {
           lastKnownScouting.current = false;
+          setScouting(false);
+          setScoutingSectionId(null);
+          setStatusMsg("");
+          setStatusProgress(0);
+          setStatusTotal(0);
+          const dataRes = await fetch(`${API}/api/sections`);
+          const data = await dataRes.json();
+          const id = currentSectionIdRef.current || (data.length > 0 ? data[0].id : null);
+          if (id) setCurrentSectionId(id);
+          setSections(data);
+          if (id) {
+            const [leadsRes, statsRes] = await Promise.all([
+              fetch(`${API}/api/leads?section_id=${id}`),
+              fetch(`${API}/api/leads/stats?section_id=${id}`),
+            ]);
+            setLeads(await leadsRes.json());
+            setStats(await statsRes.json());
+          }
         }
       } catch {
         // ignore

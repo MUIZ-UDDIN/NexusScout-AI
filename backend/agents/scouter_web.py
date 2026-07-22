@@ -38,13 +38,51 @@ async def _is_challenge_page(page) -> bool:
 
 EMAIL_REGEX = r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+"
 PHONE_REGEX = r"(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"
-BLACKLIST_DOMAINS = ["google.com", "facebook.com", "twitter.com", "instagram.com", "linkedin.com", "youtube.com", "reddit.com", "amazon.com", "wikipedia.org"]
+BLACKLIST_DOMAINS = ["google.com", "facebook.com", "twitter.com", "instagram.com", "linkedin.com", "youtube.com", "reddit.com", "amazon.com", "wikipedia.org", "analyticsinsight.net", "saasworthy.com", "tracxn.com", "signalhire.com", "crunchbase.com", "owler.com", "zoominfo.com", "apollo.io", "g2.com", "capterra.com", "getapp.com", "glassdoor.com", "indeed.com", "ambitionbox.com", "goodfirms.co"]
 DIRECTORY_KEYWORDS = ["faculty", "directory", "people", "staff", "professor", "department", "member", "team"]
 PROFILE_KEYWORDS = ["profile", "faculty", "people", "staff", "~"]
 
 _current_query: str | None = None
 _current_section_id = None
 _current_headline: str | None = None
+
+
+def _extract_url_from_text(text: str) -> str | None:
+    body = text.split(" - ")[0] if " - " in text else text
+    url = re.search(r'https?://[^\s\)]+', body)
+    if url:
+        return url.group(0)
+    domain = re.search(r'(?<!\w)([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|io|ai|co|net|org|app|dev|in|uk|us|eu))(?!\S)', body)
+    if domain:
+        return domain.group(0)
+    return None
+
+
+BUSINESS_SUFFIXES = {"ltd", "ltd.", "limited", "inc", "inc.", "llc", "gmbh", "co", "co.", "corp", "corp.",
+                     "group", "technologies", "tech", "solutions", "llp", "plc",
+                     "usa", "uk", "eu", "asia", "germany", "france", "india", "china", "japan",
+                     "kg", "sa", "bv", "nv", "pty", "pvt", "pvt."}
+
+
+def _matches_company_exact(name: str, company: str) -> bool:
+    pattern = re.escape(company)
+    return bool(re.search(rf"(?<!\w){pattern}(?!\w)", name, re.IGNORECASE))
+
+
+def _name_matches_business(name: str | None, company: str) -> bool:
+    if not name:
+        return False
+    n = name.strip().lower()
+    q = company.strip().lower()
+    if n == q:
+        return True
+    if n.startswith(q):
+        rest = n[len(q):].strip().strip(",").strip()
+        if not rest:
+            return True
+        words = [w for w in rest.split() if w]
+        return all(w in BUSINESS_SUFFIXES for w in words)
+    return False
 
 def _extract_url(href: str) -> str | None:
     if not href:
@@ -198,9 +236,11 @@ async def _extract_person_info(page, known_name: str | None = None) -> dict:
         pass
     return info
 
-async def _save_lead(name: str, email: str | None, phone: str | None, description: str | None):
+async def _save_lead(name: str, email: str | None, phone: str | None, description: str | None, website: str | None = None):
     if not name:
         return
+    if not website and _current_headline:
+        website = _extract_url_from_text(_current_headline)
     async with AsyncSessionLocal() as session:
         try:
             new_lead = Lead(
@@ -208,6 +248,7 @@ async def _save_lead(name: str, email: str | None, phone: str | None, descriptio
                 email=email,
                 phone=phone,
                 description=description,
+                website=website,
                 search_query=_current_query,
                 section_id=_current_section_id,
                 trigger_event=_current_headline,
@@ -218,7 +259,7 @@ async def _save_lead(name: str, email: str | None, phone: str | None, descriptio
         except Exception:
             await session.rollback()
 
-async def scout_web(query: str, depth: int = 5, section_id=None, headline=None):
+async def scout_web(query: str, depth: int = 5, section_id=None, headline=None, company_mode=False):
     global _current_query, _current_section_id, _current_headline
     _current_query = query
     _current_section_id = section_id
@@ -237,18 +278,24 @@ async def scout_web(query: str, depth: int = 5, section_id=None, headline=None):
         results = await _search_ddg(page, query, max_results=10)
         print(f"[*] Found {len(results)} search results")
 
-        directory_queries = [
-            f"{query} faculty directory",
-            f"{query} staff list",
-        ]
-        for dq in directory_queries:
-            extra = await _search_ddg(page, dq, max_results=8)
-            existing_hrefs = {r["href"] for r in results}
-            for r in extra:
-                if r["href"] not in existing_hrefs:
-                    results.append(r)
-                    existing_hrefs.add(r["href"])
+        if not company_mode:
+            directory_queries = [
+                f"{query} faculty directory",
+                f"{query} staff list",
+            ]
+            for dq in directory_queries:
+                extra = await _search_ddg(page, dq, max_results=8)
+                existing_hrefs = {r["href"] for r in results}
+                for r in extra:
+                    if r["href"] not in existing_hrefs:
+                        results.append(r)
+                        existing_hrefs.add(r["href"])
         print(f"[*] After directory queries: {len(results)} unique results")
+
+        exact_results = [r for r in results if _matches_company_exact(r["title"], query) or _matches_company_exact(r["snippet"], query)]
+        skipped = len(results) - len(exact_results)
+        results = exact_results
+        print(f"[*] {skipped} results skipped (no exact company name match), {len(results)} kept")
 
         all_persons = []
         visited_dir_pages = set()
@@ -269,21 +316,27 @@ async def scout_web(query: str, depth: int = 5, section_id=None, headline=None):
                 print(f"[{classification}] {r['title'][:50]}")
 
                 if classification == "directory":
+                    if company_mode:
+                        print(f"  -> Skipping directory page (company mode)")
+                        continue
                     visited_dir_pages.add(r["href"])
                     entries = await _extract_directory_entries(page)
                     print(f"  -> Found {len(entries)} potential entries")
                     for e in entries:
                         if e.get("email"):
                             all_persons.append(e)
-                            await _save_lead(e["name"], e["email"], None, None)
+                            await _save_lead(e["name"], e["email"], None, None, website=r["href"])
                         elif e.get("href"):
                             persons_to_deep_scrape.append(e)
                 elif classification == "single":
+                    if company_mode and not _name_matches_business(r["title"], query):
+                        print(f"  -> Skipping (title doesn't match company name)")
+                        continue
                     visited_single_pages.add(r["href"])
                     info = await _extract_person_info(page, r["title"])
                     if info["name"]:
                         all_persons.append(info)
-                        await _save_lead(info["name"], info["email"], info["phone"], info["description"])
+                        await _save_lead(info["name"], info["email"], info["phone"], info["description"], website=r["href"])
                 else:
                     pass
             except Exception as e:
@@ -306,7 +359,7 @@ async def scout_web(query: str, depth: int = 5, section_id=None, headline=None):
                     info = await _extract_person_info(page, p["name"])
                     if info.get("email") or info.get("phone"):
                         all_persons.append(info)
-                        await _save_lead(info["name"], info["email"], info["phone"], info["description"])
+                        await _save_lead(info["name"], info["email"], info["phone"], info["description"], website=p["href"])
                 except Exception as e:
                     print(f"[!] Deep scrape error {p['name']}: {e}")
 

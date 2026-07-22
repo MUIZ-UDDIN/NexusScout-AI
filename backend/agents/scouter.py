@@ -3,6 +3,7 @@ if sys.platform == "win32":
     import asyncio
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+import re
 from core.browser import init_stealth_browser
 from database.engine import init_db, AsyncSessionLocal
 from database.models import Lead
@@ -12,6 +13,29 @@ import asyncio
 _current_query: str | None = None
 _current_section_id = None
 _current_headline: str | None = None
+
+
+SUFFIXES = {"ltd", "ltd.", "limited", "inc", "inc.", "llc", "gmbh", "co", "co.", "corp", "corp.",
+            "group", "technologies", "tech", "solutions", "llp", "plc",
+            "usa", "uk", "eu", "asia", "germany", "france", "india", "china", "japan",
+            "gmbh & co", "kg", "sa", "bv", "nv", "pty", "pvt", "pvt."}
+
+
+def _matches_exact(name: str | None, query: str) -> bool:
+    if not name:
+        return False
+    name_clean = name.strip().lower()
+    query_clean = query.strip().lower()
+
+    if name_clean == query_clean:
+        return True
+    if name_clean.startswith(query_clean):
+        rest = name_clean[len(query_clean):].strip().strip(",").strip()
+        if not rest:
+            return True
+        words = [w for w in rest.split() if w]
+        return all(w in SUFFIXES for w in words)
+    return False
 
 async def _extract_details(page, known_name: str | None = None) -> dict:
     name_el = page.locator("h1").first
@@ -52,6 +76,9 @@ async def _extract_details(page, known_name: str | None = None) -> dict:
 
 async def _save_lead(name: str, website: str | None, phone: str | None, address: str | None):
     if not name:
+        return
+    if not _matches_exact(name, _current_query):
+        print(f"[!] SKIP {name} — doesn't match query '{_current_query}'")
         return
     async with AsyncSessionLocal() as session:
         try:
@@ -137,6 +164,11 @@ async def scout_leads(query: str, depth: int = 3, section_id=None, headline=None
                     print(f"[!] Error collecting card {i}: {e}")
 
             print(f"[*] Sidebar: {skipped_sponsored} sponsored, {skipped_no_place} non-place, {len(card_hrefs)} valid cards")
+
+            exact_hrefs = [c for c in card_hrefs if _matches_exact(c.get("name"), query)]
+            skipped_name = len(card_hrefs) - len(exact_hrefs)
+            card_hrefs = exact_hrefs
+            print(f"[*] {skipped_name} cards skipped (name doesn't match), {len(card_hrefs)} kept")
             set_status(True, f"Processing {len(card_hrefs)} leads...", "scouting")
 
             for idx, data in enumerate(card_hrefs):

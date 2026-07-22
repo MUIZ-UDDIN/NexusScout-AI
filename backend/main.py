@@ -5,7 +5,7 @@ if sys.platform == "win32":
 
 import uuid
 from datetime import datetime
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,7 @@ from agents.enricher import enrich_lead
 from services.status import set_status, get_status
 from services.ai_service import generate_opening
 from services.email_service import send_lead_email
+import re
 from pydantic import BaseModel
 import asyncio
 
@@ -26,6 +27,34 @@ class ScoutRequest(BaseModel):
     section_id: str | None = None
     mode: str = "maps"
     headline: str | None = None
+
+class N8NScoutRequest(BaseModel):
+    company: str
+    score: str | int = 0
+    headline: str
+
+
+def company_matches_headline(company: str, headline: str | None) -> bool:
+    if not headline:
+        return False
+    pattern = re.escape(company)
+    return bool(re.search(rf"(?<!\w){pattern}(?!\w)", headline, re.IGNORECASE))
+
+
+def clean_company_name(name: str) -> str:
+    name = re.sub(r'\.[a-zA-Z]{2,}$', '', name.strip())
+    return name.strip()
+
+
+def extract_url_from_headline(headline: str) -> str | None:
+    body = headline.split(" - ")[0] if " - " in headline else headline
+    url = re.search(r'https?://[^\s\)]+', body)
+    if url:
+        return url.group(0)
+    domain = re.search(r'(?<!\w)([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|io|ai|co|net|org|app|dev|in|uk|us|eu))(?!\S)', body)
+    if domain:
+        return domain.group(0)
+    return None
 
 app = FastAPI()
 
@@ -81,6 +110,74 @@ async def run_full_research(query: str, depth: int = 3, section_id: str | None =
 async def scout_status():
     return get_status()
 
+N8N_SECTION_NAME = "N8N Scout"
+
+
+async def run_n8n_research(company: str, headline: str | None):
+    async with scout_lock:
+        try:
+            set_status(True, f"n8n: Scouting {company}...", "scouting")
+            async with AsyncSessionLocal() as session:
+                existing = await session.execute(
+                    select(Section).where(Section.name == N8N_SECTION_NAME)
+                )
+                section = existing.scalar_one_or_none()
+                if not section:
+                    section = Section(name=N8N_SECTION_NAME, search_query=N8N_SECTION_NAME)
+                    session.add(section)
+                    await session.commit()
+                    await session.refresh(section)
+
+            await scout_leads(company, depth=3, section_id=section.id, headline=headline)
+
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(func.count()).select_from(Lead).where(Lead.section_id == section.id, Lead.name == company)
+                )
+                maps_found = result.scalar() or 0
+
+            if maps_found == 0:
+                print(f"[n8n] No Maps results for {company}, falling back to web search...")
+                set_status(True, f"n8n: Web fallback for {company}...", "scouting")
+                await scout_web(company, depth=3, section_id=section.id, headline=headline, company_mode=True)
+
+            set_status(True, "Enriching leads...", "enriching")
+            await enrich_lead()
+        except Exception as e:
+            print(f"[!] run_n8n_research failed: {e}")
+        finally:
+            set_status(False, "Done", "done")
+
+
+@app.post("/api/scout/n8n")
+async def trigger_n8n_scout(req: Request, background_tasks: BackgroundTasks):
+    try:
+        body = await req.json()
+    except Exception:
+        form = await req.form()
+        body = {k: v for k, v in form.items()}
+
+    company = body.get("company") or body.get("query", "")
+    score = body.get("score", 0)
+    headline = body.get("headline", "")
+
+    if not company or not headline:
+        print(f"[n8n] Missing fields: {body}")
+        return {"status": "Error", "reason": "Missing company/query or headline"}
+
+    print(f"[n8n] Received: company='{company}' score='{score}' headline='{headline[:80]}...'")
+
+    if not company_matches_headline(company, headline):
+        print(f"[n8n] SKIPPED {company} — not found in headline")
+        return {"status": "Skipped", "reason": "Company name not found in headline", "company": company}
+
+    company_clean = clean_company_name(company)
+    print(f"[n8n] Scouting {company_clean} (original: {company})")
+
+    set_status(True, f"n8n: Queued {company_clean}...", "queued")
+    background_tasks.add_task(run_n8n_research, company_clean, headline)
+    return {"status": "Agent Dispatched", "company": company_clean, "headline": headline}
+
 @app.post("/api/scout")
 async def trigger_scout(request: ScoutRequest, background_tasks: BackgroundTasks):
     set_status(True, "Queued...", "queued")
@@ -95,6 +192,25 @@ async def get_leads(section_id: str | None = None, db: AsyncSession = Depends(ge
     results = await db.execute(stmt)
 
     return results.scalars().all()
+
+@app.get("/api/leads/unposted")
+async def get_unposted_leads(db: AsyncSession = Depends(get_db)):
+    stmt = select(Lead).where(Lead.posted == False, Lead.status == "enriched").order_by(Lead.created_at.desc())
+    results = await db.execute(stmt)
+    return results.scalars().all()
+
+class MarkPostedRequest(BaseModel):
+    lead_ids: list[str]
+
+@app.post("/api/leads/mark-posted")
+async def mark_leads_posted(body: MarkPostedRequest, db: AsyncSession = Depends(get_db)):
+    for lid in body.lead_ids:
+        lead = await db.get(Lead, uuid.UUID(lid))
+        if lead and not lead.posted:
+            lead.posted = True
+            print(f"[✓] Marked posted: {lead.name} ({lead.email})")
+    await db.commit()
+    return {"status": "ok", "count": len(body.lead_ids)}
 
 @app.get("/api/leads/stats")
 async def get_lead_stats(section_id: str | None = None, db: AsyncSession = Depends(get_db)):

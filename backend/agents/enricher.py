@@ -7,7 +7,19 @@ import re
 import asyncio
 import httpx
 
-N8N_CALLBACK_URL = "https://instance-analog-ebook-hair.trycloudflare.com/webhook-test/lead-enriched"
+async def _search_emails_ddg(company: str) -> list[str]:
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            r = await client.get(f"https://html.duckduckgo.com/html/?q={company.replace(' ', '+')}+email+contact")
+            if r.status_code != 200:
+                return []
+            found = list(set(re.findall(r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+", r.text, re.I)))
+            blacklist = ["sentry", "wix", "example", "vimeo", "google", "jpg", "png"]
+            clean = [e for e in found if not any(noise in e.lower() for noise in blacklist)]
+            company_key = company.split()[0].lower()
+            return [e for e in clean if company_key in e.lower().split("@")[1] or company_key in e.lower().split("@")[0]]
+    except Exception:
+        return []
 
 CHALLENGE_TITLE_PATTERNS = [
     "verifying you are human", "verifying you're human",
@@ -49,19 +61,34 @@ async def enrich_lead():
     browser = components["browser"]
     try:
         async with AsyncSessionLocal() as session:
-            stmt = select(Lead).where(Lead.status == "scouted").limit(10)
+            stmt = select(Lead).where(Lead.status == "scouted")
             leads = (await session.execute(stmt)).scalars().all()
             set_status(True, f"Enriching {len(leads)} leads...", "enriching", 0, len(leads))
 
             for idx, lead in enumerate(leads):
                 set_status(True, f"Enriching {lead.name} ({idx+1}/{len(leads)})...", "enriching", idx + 1, len(leads))
-                if not lead.website or "http" not in lead.website: 
+                has_maps_data = bool(lead.phone or lead.address)
+                got_site_data = False
+
+                if not lead.website or "http" not in lead.website:
+                    if has_maps_data:
+                        lead.status = "enriched"
+                        print(f"[✓] {lead.name} enriched from Maps data (no website)")
+                        continue
+                    lead.status = "failed"
+                    print(f"[!] No valid website for {lead.name}, marking failed")
                     continue
                 try:
                     await page.goto(lead.website, timeout=10000, wait_until="domcontentloaded")
                     await asyncio.sleep(0.5)
 
+                    got_site_data = True
+
                     if await _is_challenge_page(page):
+                        if has_maps_data or got_site_data:
+                            lead.status = "enriched"
+                            print(f"[✓] {lead.name} enriched (challenge page but site exists)")
+                            continue
                         print(f"[!] Challenge page, marking failed: {lead.website}")
                         lead.status = "failed"
                         continue
@@ -101,6 +128,8 @@ async def enrich_lead():
                                 await page.wait_for_load_state("domcontentloaded")
 
                             except Exception:
+                                lead.status = "enriched"
+                                print(f"[✓] {lead.name} enriched (contact page failed, homepage data saved)")
                                 continue
                             
                             new_html = await page.content()
@@ -110,15 +139,26 @@ async def enrich_lead():
 
                     clean_emails = list(set(clean_emails))
 
+                    if not clean_emails:
+                        print(f"[*] No email on page, searching DuckDuckGo for {lead.name}...")
+                        ddg_emails = await _search_emails_ddg(lead.name)
+                        if ddg_emails:
+                            clean_emails = ddg_emails[:3]
+                            print(f"[✅] Found emails via DDG: {clean_emails}")
+
                     if clean_emails:
                         lead.email = ", ".join(clean_emails)
                         print(f"[✅] Final Leads for {lead.name}: {lead.email}")
 
                     lead.status = "enriched"
-            
+
                 except Exception:
+                    if has_maps_data or got_site_data:
+                        lead.status = "enriched"
+                        print(f"[✓] {lead.name} enriched (website partially loaded)")
+                        continue
+                    print(f"[!] Could not reach {lead.website}, marking failed")
                     lead.status = "failed"
-                    print(f"[!] Could not reach {lead.website}")
                     continue
                 
             await session.commit()
