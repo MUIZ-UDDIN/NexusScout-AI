@@ -77,7 +77,7 @@ async def _extract_details(page, known_name: str | None = None) -> dict:
 async def _save_lead(name: str, website: str | None, phone: str | None, address: str | None):
     if not name:
         return
-    if not _matches_exact(name, _current_query):
+    if _current_headline and not _matches_exact(name, _current_query):
         print(f"[!] SKIP {name} — doesn't match query '{_current_query}'")
         return
     async with AsyncSessionLocal() as session:
@@ -165,10 +165,11 @@ async def scout_leads(query: str, depth: int = 3, section_id=None, headline=None
 
             print(f"[*] Sidebar: {skipped_sponsored} sponsored, {skipped_no_place} non-place, {len(card_hrefs)} valid cards")
 
-            exact_hrefs = [c for c in card_hrefs if _matches_exact(c.get("name"), query)]
-            skipped_name = len(card_hrefs) - len(exact_hrefs)
-            card_hrefs = exact_hrefs
-            print(f"[*] {skipped_name} cards skipped (name doesn't match), {len(card_hrefs)} kept")
+            if headline:
+                exact_hrefs = [c for c in card_hrefs if _matches_exact(c.get("name"), query)]
+                skipped_name = len(card_hrefs) - len(exact_hrefs)
+                card_hrefs = exact_hrefs
+                print(f"[*] {skipped_name} cards skipped (name doesn't match), {len(card_hrefs)} kept")
             set_status(True, f"Processing {len(card_hrefs)} leads...", "scouting")
 
             for idx, data in enumerate(card_hrefs):
