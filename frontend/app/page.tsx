@@ -5,7 +5,7 @@ import { Lead, LeadStats } from "@/types/lead";
 import StatsBar from "@/components/StatsBar";
 import SearchBar from "@/components/SearchBar";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface Section {
   id: string;
