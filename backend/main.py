@@ -1,4 +1,5 @@
 import uuid
+import traceback
 from datetime import datetime
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Request
 from sqlalchemy import select, func
@@ -99,8 +100,8 @@ async def run_full_research(query: str, depth: int = 3, section_id: str | None =
             await enrich_lead()
             set_status(False, "Scout complete", "done")
         except Exception as e:
-            print(f"[!] run_full_research failed: {e}")
-            set_status(False, f"Scout failed: {e}", "error")
+            print(f"[!] run_full_research failed: {e}\n{traceback.format_exc()}")
+            set_status(False, f"Scout failed: {type(e).__name__}: {e}", "error")
 
 @app.get("/api/scout/status")
 async def scout_status():
@@ -141,8 +142,8 @@ async def run_n8n_research(company: str, headline: str | None):
             await enrich_lead()
             set_status(False, "Scout complete", "done")
         except Exception as e:
-            print(f"[!] run_n8n_research failed: {e}")
-            set_status(False, f"Scout failed: {e}", "error")
+            print(f"[!] run_n8n_research failed: {e}\n{traceback.format_exc()}")
+            set_status(False, f"Scout failed: {type(e).__name__}: {e}", "error")
 
 
 @app.post("/api/scout/n8n")
