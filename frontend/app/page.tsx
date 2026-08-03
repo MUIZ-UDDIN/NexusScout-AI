@@ -128,6 +128,7 @@ export default function Home() {
         setStatusProgress(s.progress || 0);
         setStatusTotal(s.total || 0);
         if (!s.running) {
+          if (s.phase === "error") setToast(s.message || "Scout failed");
           setScouting(false);
           setScoutingSectionId(null);
           setStatusMsg("");
@@ -157,6 +158,7 @@ export default function Home() {
         }
         if (!s.running && lastKnownScouting.current) {
           lastKnownScouting.current = false;
+          if (s.phase === "error") setToast(s.message || "Scout failed");
           setScouting(false);
           setScoutingSectionId(null);
           setStatusMsg("");

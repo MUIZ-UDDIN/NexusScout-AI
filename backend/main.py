@@ -97,10 +97,10 @@ async def run_full_research(query: str, depth: int = 3, section_id: str | None =
                 await scout_leads(query, depth=depth, section_id=section.id, headline=headline)
             set_status(True, "Enriching leads...", "enriching")
             await enrich_lead()
+            set_status(False, "Scout complete", "done")
         except Exception as e:
             print(f"[!] run_full_research failed: {e}")
-        finally:
-            set_status(False, "Done", "done")
+            set_status(False, f"Scout failed: {e}", "error")
 
 @app.get("/api/scout/status")
 async def scout_status():
@@ -139,10 +139,10 @@ async def run_n8n_research(company: str, headline: str | None):
 
             set_status(True, "Enriching leads...", "enriching")
             await enrich_lead()
+            set_status(False, "Scout complete", "done")
         except Exception as e:
             print(f"[!] run_n8n_research failed: {e}")
-        finally:
-            set_status(False, "Done", "done")
+            set_status(False, f"Scout failed: {e}", "error")
 
 
 @app.post("/api/scout/n8n")
