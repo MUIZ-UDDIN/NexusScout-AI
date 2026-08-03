@@ -1,6 +1,14 @@
+import sys
+import asyncio
 import uuid
 import traceback
 from datetime import datetime
+
+if sys.platform == "win32":
+    class _ForceProactorPolicy(asyncio.WindowsProactorEventLoopPolicy):
+        def new_event_loop(self):
+            return asyncio.ProactorEventLoop()
+    asyncio.set_event_loop_policy(_ForceProactorPolicy())
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +65,27 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup():
     await init_db()
+
+@app.get("/api/debug/loop")
+async def debug_loop():
+    import asyncio
+    import sys
+    import traceback
+    loop = asyncio.get_running_loop()
+    result = {
+        "loop_type": type(loop).__name__,
+        "policy": type(asyncio.get_event_loop_policy()).__name__,
+    }
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", "print('subprocess-ok')",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        result["subprocess"] = {"status": proc.returncode, "stdout": stdout.decode().strip(), "stderr": stderr.decode().strip()}
+    except Exception as e:
+        result["subprocess"] = {"error": f"{type(e).__name__}: {e}", "traceback": traceback.format_exc()}
+    return result
 
 app.add_middleware(
     CORSMiddleware,
