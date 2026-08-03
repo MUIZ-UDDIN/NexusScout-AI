@@ -1,8 +1,3 @@
-import sys
-if sys.platform == "win32":
-    import asyncio
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 import re
 from core.browser import init_stealth_browser
 from database.engine import init_db, AsyncSessionLocal

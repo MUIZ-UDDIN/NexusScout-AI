@@ -424,7 +424,7 @@ export default function Home() {
                   <p className="text-lg font-semibold text-white/60">No leads match &quot;{searchQuery}&quot;</p>
                 </div>
               ) : (
-                <div className="grid gap-3 pb-2">
+                <div className="grid grid-cols-1 gap-3 pb-2">
                   {filteredLeads.map((lead, i) => {
                     const isOpen = expanded === lead.id;
                     return (
@@ -471,7 +471,7 @@ export default function Home() {
                           </div>
                         </button>
 
-                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[32rem] opacity-100" : "max-h-0 opacity-0"}`}>
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[64rem] opacity-100" : "max-h-0 opacity-0"}`}>
                         <div className="px-5 pb-5 pt-0 border-t border-white/[0.06]">
                           {lead.trigger_event && (
                             <div className="pt-4 pb-3 flex items-start gap-2 text-xs text-amber-300/80 border-b border-white/[0.06] mb-2">
@@ -486,22 +486,22 @@ export default function Home() {
                               <div className="flex items-center gap-2 text-sm text-white/60">
                                 <span className="size-7 rounded-lg bg-gradient-to-br from-amber-500/30 to-orange-500/30 flex items-center justify-center text-white/70 text-xs shrink-0">🌐</span>
                                 {lead.website ? (
-                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="truncate hover:text-violet-300 transition-colors">{lead.website.replace(/^https?:\/\//, "")}</a>
+                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate hover:text-violet-300 transition-colors">{lead.website.replace(/^https?:\/\//, "")}</a>
                                 ) : <span className="text-white/30">No website exists</span>}
                               </div>
                               <div className="flex items-center gap-2 text-sm text-white/60">
                                 <span className="size-7 rounded-lg bg-gradient-to-br from-violet-500/30 to-purple-500/30 flex items-center justify-center text-white/70 text-xs shrink-0">@</span>
                                 {lead.email ? (
-                                  <a href={`mailto:${lead.email}`} className="truncate hover:text-violet-300 transition-colors">{lead.email}</a>
+                                  <a href={`mailto:${lead.email}`} className="min-w-0 truncate hover:text-violet-300 transition-colors">{lead.email}</a>
                                 ) : <span className="text-white/30">Email not found</span>}
                               </div>
                               <div className="flex items-center gap-2 text-sm text-white/60">
                                 <span className="size-7 rounded-lg bg-gradient-to-br from-sky-500/30 to-blue-500/30 flex items-center justify-center text-white/70 text-xs shrink-0">📞</span>
-                                <span className={lead.phone ? "" : "text-white/30"}>{lead.phone || "Phone number not mentioned"}</span>
+                                <span className={`min-w-0 break-words ${lead.phone ? "" : "text-white/30"}`}>{lead.phone || "Phone number not mentioned"}</span>
                               </div>
                               <div className="flex items-center gap-2 text-sm text-white/60">
                                 <span className="size-7 rounded-lg bg-gradient-to-br from-teal-500/30 to-emerald-500/30 flex items-center justify-center text-white/70 text-xs shrink-0">📍</span>
-                                <span className={lead.address ? "" : "text-white/30"}>{lead.address || "Location not mentioned"}</span>
+                                <span className={`min-w-0 break-words ${lead.address ? "" : "text-white/30"}`}>{lead.address || "Location not mentioned"}</span>
                               </div>
                             </div>
                           </div>
