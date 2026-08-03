@@ -64,7 +64,8 @@ async def startup():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8001", "https://nexus-scout-backend.loca.lt", "https://*.loca.lt", "https://6409ef74.nexusscout-ai.pages.dev", "https://*.pages.dev"],
+    allow_origins=["http://localhost:3000", "http://localhost:8001", "https://6409ef74.nexusscout-ai.pages.dev", "https://nexus-scout-backend.loca.lt"],
+    allow_origin_regex=r"https://.*\.pages\.dev|https://.*\.loca\.lt|http://localhost:\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
